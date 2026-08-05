@@ -222,8 +222,6 @@ const QFont *QHaikuTheme::font(Font type) const
     QPlatformFontDatabase *fontDatabase = m_integration->fontDatabase();
 
     if (fontDatabase && m_fonts.isEmpty()) {
-		QFontDatabase db;
-
 	    font_family plainFontFamily;
 	    font_style plainFontStyle;
 		BFont haikuPlainFont = *be_plain_font;
@@ -245,22 +243,29 @@ const QFont *QHaikuTheme::font(Font type) const
 		float kSmallFont = 0.72;
 		float kBold = 0.96;
 
-	    QFont baseFont = db.font(plainFontFamily, plainFontStyle, haikuPlainFont.Size());
+	    // Build QFonts directly: going through QFontDatabase::font() here
+	    // re-enters QGuiApplication::font() while its mutex is already held
+	    // by the caller during application init (deadlock on Qt 6.8).
+	    QFont baseFont((QString(QLatin1String(plainFontFamily))));
+	    baseFont.setStyleName(QLatin1String(plainFontStyle));
 	    if (haikuPlainFont.Size() >= 0)
 			baseFont.setPointSizeF(haikuPlainFont.Size());
 	    baseFont.setStretch(QFont::Unstretched);
 
-	    QFont boldFont = db.font(boldFontFamily, boldFontStyle, haikuBoldFont.Size() * kBold);
+	    QFont boldFont((QString(QLatin1String(boldFontFamily))));
+	    boldFont.setStyleName(QLatin1String(boldFontStyle));
 	    if (haikuBoldFont.Size() >= 0)
 			boldFont.setPointSizeF(haikuBoldFont.Size() * kBold);
 	    boldFont.setStretch(QFont::Unstretched);
 
-	    QFont monoFont = db.font(fixedFontFamily, fixedFontStyle, haikuFixedFont.Size());
+	    QFont monoFont((QString(QLatin1String(fixedFontFamily))));
+	    monoFont.setStyleName(QLatin1String(fixedFontStyle));
 	    if (haikuFixedFont.Size() >= 0)
 			monoFont.setPointSizeF(haikuFixedFont.Size());
 	    monoFont.setStretch(QFont::Unstretched);
 
-	    QFont menuFont = db.font(haikuMenuFontInfo.f_family, haikuMenuFontInfo.f_style, haikuMenuFontInfo.font_size);
+	    QFont menuFont((QString(QLatin1String(haikuMenuFontInfo.f_family))));
+	    menuFont.setStyleName(QLatin1String(haikuMenuFontInfo.f_style));
 	    if (haikuMenuFontInfo.font_size >= 0)
 			menuFont.setPointSizeF(haikuMenuFontInfo.font_size);
 	    menuFont.setStretch(QFont::Unstretched);

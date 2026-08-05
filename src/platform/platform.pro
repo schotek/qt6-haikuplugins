@@ -8,6 +8,20 @@ QT += widgets-private core-private gui-private
 
 LIBS += -lbe -lroot -ltracker -lgame -lGL -lGLU
 
+exists(/etc/vos.specs) {
+	# Vitruvian: Haiku API headers live in /system/develop/headers (list in
+	# /etc/vos.specs) and every unit including them needs the Linux build
+	# shim. BGLView is in libopengl.so here (libGL is Mesa's).
+	VOS_INCLUDES = $$system(cat /etc/vos.specs)
+	# vos.specs misses a few kit subdirs the plugin needs directly
+	VOS_INCLUDES += -I/system/develop/headers/os/opengl \
+		-I/system/develop/headers/os/game \
+		-I/system/develop/headers/os/locale
+	QMAKE_CFLAGS += $$VOS_INCLUDES -include LinuxBuildCompatibility.h
+	QMAKE_CXXFLAGS += $$VOS_INCLUDES -include LinuxBuildCompatibility.h
+	LIBS += -lopengl
+}
+
 CONFIG += plugin
 
 CONFIG += link_pkgconfig

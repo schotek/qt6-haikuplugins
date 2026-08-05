@@ -95,6 +95,10 @@ QHaikuIntegration::~QHaikuIntegration()
 
 bool QHaikuIntegration::isOpenGLEnabled()
 {
+	// BGLView-backed OSMesa is not validated on Vitruvian yet: opt-in only.
+	if (!qEnvironmentVariableIntValue("QT_HAIKU_ENABLE_GL"))
+		return false;
+
 	app_info appInfo;
 	if (be_app->GetAppInfo(&appInfo) == B_OK) {
 		QStringList disabledListApps;

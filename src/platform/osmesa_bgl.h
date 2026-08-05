@@ -103,6 +103,12 @@ GLAPI void GLAPIENTRY OSMesaSwapBuffers(OSMesaContext ctx);
 #include <cstring>
 #include <algorithm>
 
+/* Vitruvian's GLView.h predates the shared-context option; requesting it
+ * is best-effort anyway, so degrade to "not requested" where missing. */
+#ifndef BGL_SHARE_CONTEXT
+#define BGL_SHARE_CONTEXT 0
+#endif
+
 struct OSMesaContextRec {
 	BGLView* glView;
 	void* userBuffer;

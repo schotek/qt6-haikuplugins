@@ -64,8 +64,62 @@
 
 QT_BEGIN_NAMESPACE
 
+// Vitruvian's input_server delivers raw evdev codes in B_KEY_DOWN's "key"
+// field, while classic Haiku sends Haiku keymap codes. Detect once via the
+// canonical /dev/nexus probe and pick the matching translation table.
+static bool vitruvianEvdevKeys()
+{
+	static const bool isVitruvian = (access("/dev/nexus", F_OK) == 0);
+	return isVitruvian;
+}
+
+static uint32 translateEvdevKeyCode(uint32 key)
+{
+	static const uint32 map[][2] = {
+		{ 1, Qt::Key_Escape }, { 2, Qt::Key_1 }, { 3, Qt::Key_2 },
+		{ 4, Qt::Key_3 }, { 5, Qt::Key_4 }, { 6, Qt::Key_5 },
+		{ 7, Qt::Key_6 }, { 8, Qt::Key_7 }, { 9, Qt::Key_8 },
+		{ 10, Qt::Key_9 }, { 11, Qt::Key_0 }, { 12, Qt::Key_Minus },
+		{ 13, Qt::Key_Equal }, { 14, Qt::Key_Backspace }, { 15, Qt::Key_Tab },
+		{ 16, Qt::Key_Q }, { 17, Qt::Key_W }, { 18, Qt::Key_E },
+		{ 19, Qt::Key_R }, { 20, Qt::Key_T }, { 21, Qt::Key_Y },
+		{ 22, Qt::Key_U }, { 23, Qt::Key_I }, { 24, Qt::Key_O },
+		{ 25, Qt::Key_P }, { 26, Qt::Key_BracketLeft }, { 27, Qt::Key_BracketRight },
+		{ 28, Qt::Key_Return }, { 29, Qt::Key_Control }, { 30, Qt::Key_A },
+		{ 31, Qt::Key_S }, { 32, Qt::Key_D }, { 33, Qt::Key_F },
+		{ 34, Qt::Key_G }, { 35, Qt::Key_H }, { 36, Qt::Key_J },
+		{ 37, Qt::Key_K }, { 38, Qt::Key_L }, { 39, Qt::Key_Semicolon },
+		{ 40, Qt::Key_Apostrophe }, { 41, Qt::Key_QuoteLeft }, { 42, Qt::Key_Shift },
+		{ 43, Qt::Key_Backslash }, { 44, Qt::Key_Z }, { 45, Qt::Key_X },
+		{ 46, Qt::Key_C }, { 47, Qt::Key_V }, { 48, Qt::Key_B },
+		{ 49, Qt::Key_N }, { 50, Qt::Key_M }, { 51, Qt::Key_Comma },
+		{ 52, Qt::Key_Period }, { 53, Qt::Key_Slash }, { 54, Qt::Key_Shift },
+		{ 55, Qt::Key_Asterisk }, { 56, Qt::Key_Alt }, { 57, Qt::Key_Space },
+		{ 58, Qt::Key_CapsLock }, { 59, Qt::Key_F1 }, { 60, Qt::Key_F2 },
+		{ 61, Qt::Key_F3 }, { 62, Qt::Key_F4 }, { 63, Qt::Key_F5 },
+		{ 64, Qt::Key_F6 }, { 65, Qt::Key_F7 }, { 66, Qt::Key_F8 },
+		{ 67, Qt::Key_F9 }, { 68, Qt::Key_F10 }, { 69, Qt::Key_NumLock },
+		{ 70, Qt::Key_ScrollLock }, { 87, Qt::Key_F11 }, { 88, Qt::Key_F12 },
+		{ 96, Qt::Key_Enter }, { 97, Qt::Key_Control }, { 98, Qt::Key_Slash },
+		{ 99, Qt::Key_Print }, { 100, Qt::Key_AltGr }, { 102, Qt::Key_Home },
+		{ 103, Qt::Key_Up }, { 104, Qt::Key_PageUp }, { 105, Qt::Key_Left },
+		{ 106, Qt::Key_Right }, { 107, Qt::Key_End }, { 108, Qt::Key_Down },
+		{ 109, Qt::Key_PageDown }, { 110, Qt::Key_Insert }, { 111, Qt::Key_Delete },
+		{ 119, Qt::Key_Pause }, { 125, Qt::Key_Meta }, { 127, Qt::Key_Menu },
+		{ 0, 0 }
+	};
+	for (uint32 i = 0; map[i][0]; i++) {
+		if (map[i][0] == key)
+			return map[i][1];
+	}
+	return Qt::Key_unknown;
+}
+
 static uint32 translateKeyCode(uint32 key)
 {
+	if (vitruvianEvdevKeys())
+		return translateEvdevKeyCode(key);
+
 	uint32 code = Qt::Key_unknown;
 	uint32 i = 0;
 	if ( modifiers() & B_NUM_LOCK ) {
@@ -169,6 +223,14 @@ void QtHaikuWindow::DispatchMessage(BMessage *msg, BHandler *handler)
 				if(msg->FindString("bytes", &bytes) == B_OK)
 					text = QString::fromUtf8(bytes);
 				uint32 qt_keycode = translateKeyCode(key);
+				if (access("/tmp/qkeys-on", F_OK) == 0) {
+					if (FILE *klog = fopen("/tmp/qkeys.log", "a")) {
+						fprintf(klog, "[qhaiku] key what=0x%x raw=0x%x qt=0x%x mods=0x%x bytes='%s'\n",
+							(unsigned)msg->what, (unsigned)key, (unsigned)qt_keycode,
+							(unsigned)modifiers, text.toUtf8().constData());
+						fclose(klog);
+					}
+				}
 				if (qt_keycode == Qt::Key_Print)
 					break;
 				if (qt_keycode == Qt::Key_Tab && modifiers & B_CONTROL_KEY)

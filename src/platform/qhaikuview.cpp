@@ -111,6 +111,15 @@ QHaikuSurfaceView::hostToQtButton(uint32 buttons) const
     return Qt::NoButton;
 }
 
+// Vitruvian's input_server reports PC-style modifiers: the physical Ctrl
+// key arrives as B_CONTROL_KEY and must stay Qt Control (classic Haiku
+// puts the shortcut role on B_COMMAND_KEY instead).
+static bool vitruvianHostModifiers()
+{
+    static const bool isVitruvian = (access("/dev/nexus", F_OK) == 0);
+    return isVitruvian;
+}
+
 Qt::KeyboardModifiers
 QHaikuSurfaceView::hostToQtModifiers(uint32 keyState) const
 {
@@ -118,10 +127,17 @@ QHaikuSurfaceView::hostToQtModifiers(uint32 keyState) const
 
     if (keyState & B_SHIFT_KEY)
         modifiers |= Qt::ShiftModifier;
-    if (keyState & B_CONTROL_KEY)
-        modifiers |= Qt::AltModifier;
-    if (keyState & B_COMMAND_KEY)
-        modifiers |= Qt::ControlModifier;
+    if (vitruvianHostModifiers()) {
+        if (keyState & B_CONTROL_KEY)
+            modifiers |= Qt::ControlModifier;
+        if (keyState & B_COMMAND_KEY)
+            modifiers |= Qt::AltModifier;
+    } else {
+        if (keyState & B_CONTROL_KEY)
+            modifiers |= Qt::AltModifier;
+        if (keyState & B_COMMAND_KEY)
+            modifiers |= Qt::ControlModifier;
+    }
 
     return modifiers;
 }

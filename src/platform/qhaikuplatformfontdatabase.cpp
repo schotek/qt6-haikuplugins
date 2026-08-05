@@ -98,27 +98,36 @@ QString	QHaikuPlatformFontDatabase::fontDir() const
 
 void QHaikuPlatformFontDatabase::populateFontDatabase()
 {
-	QString fontpath =	fontDir();
-
-	if (!QFile::exists(fontpath)) {
-		qFatal("QFontDatabase: Cannot find font directory %s - is Qt installed correctly?",
-			qPrintable(fontpath));
-	}
-
-	BStringList fontPaths;
+	BStringList bePaths;
 	BPathFinder::FindPaths(NULL, B_FIND_PATH_FONTS_DIRECTORY,
-		NULL, B_FIND_PATH_EXISTING_ONLY, fontPaths);
+		NULL, B_FIND_PATH_EXISTING_ONLY, bePaths);
 
-	for (int32 i = 0; i < fontPaths.CountStrings(); i++) {
-		QDir dir(QLatin1String(fontPaths.StringAt(i).String()));
-		QDirIterator qdi(dir.absolutePath(),
+	QStringList fontDirs;
+	for (int32 i = 0; i < bePaths.CountStrings(); i++)
+		fontDirs << QLatin1String(bePaths.StringAt(i).String());
+	// find_paths keeps reporting BeOS-style locations even on systems that
+	// store fonts on FHS paths (Vitruvian: /usr/share/fonts), and the
+	// reported directories may exist yet contain no fonts — probe them all.
+	fontDirs << fontDir() << QLatin1String("/usr/share/fonts");
+	fontDirs.removeDuplicates();
+
+	bool populated = false;
+	for (const QString &path : fontDirs) {
+		if (!QFile::exists(path))
+			continue;
+		QDirIterator qdi(path,
 			QStringList() << "*.ttf" << "*.otf",
 			QDir::Files, QDirIterator::Subdirectories);
 		while (qdi.hasNext()) {
 			const QByteArray file = QFile::encodeName(qdi.next());
-			QStringList families = addTTFile(QByteArray(), file);
+			addTTFile(QByteArray(), file);
+			populated = true;
 		}
 	}
+
+	if (!populated)
+		qWarning("QFontDatabase: no fonts found in: %s",
+			qPrintable(fontDirs.join(QLatin1String(", "))));
 
 	// Register aliases for generic names
 	registerAliasToFontFamily("Noto Sans", "Sans Serif");
