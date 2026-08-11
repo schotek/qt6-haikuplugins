@@ -243,31 +243,37 @@ const QFont *QHaikuTheme::font(Font type) const
 		float kSmallFont = 0.72;
 		float kBold = 0.96;
 
+	    // BFont::Size() is a pixel size in practice: Haiku runs at 72 dpi, where
+	    // a point and a pixel coincide. We report 96 dpi (see QHaikuScreen), so
+	    // feeding that number to setPointSizeF() would inflate the whole UI by
+	    // a third. Set it as a pixel size instead — the interface keeps its
+	    // native proportions while fonts an application asks for in points
+	    // still come out the size its author intended.
 	    // Build QFonts directly: going through QFontDatabase::font() here
 	    // re-enters QGuiApplication::font() while its mutex is already held
 	    // by the caller during application init (deadlock on Qt 6.8).
 	    QFont baseFont((QString(QLatin1String(plainFontFamily))));
 	    baseFont.setStyleName(QLatin1String(plainFontStyle));
 	    if (haikuPlainFont.Size() >= 0)
-			baseFont.setPointSizeF(haikuPlainFont.Size());
+			baseFont.setPixelSize(qRound(haikuPlainFont.Size()));
 	    baseFont.setStretch(QFont::Unstretched);
 
 	    QFont boldFont((QString(QLatin1String(boldFontFamily))));
 	    boldFont.setStyleName(QLatin1String(boldFontStyle));
 	    if (haikuBoldFont.Size() >= 0)
-			boldFont.setPointSizeF(haikuBoldFont.Size() * kBold);
+			boldFont.setPixelSize(qRound(haikuBoldFont.Size() * kBold));
 	    boldFont.setStretch(QFont::Unstretched);
 
 	    QFont monoFont((QString(QLatin1String(fixedFontFamily))));
 	    monoFont.setStyleName(QLatin1String(fixedFontStyle));
 	    if (haikuFixedFont.Size() >= 0)
-			monoFont.setPointSizeF(haikuFixedFont.Size());
+			monoFont.setPixelSize(qRound(haikuFixedFont.Size()));
 	    monoFont.setStretch(QFont::Unstretched);
 
 	    QFont menuFont((QString(QLatin1String(haikuMenuFontInfo.f_family))));
 	    menuFont.setStyleName(QLatin1String(haikuMenuFontInfo.f_style));
 	    if (haikuMenuFontInfo.font_size >= 0)
-			menuFont.setPointSizeF(haikuMenuFontInfo.font_size);
+			menuFont.setPixelSize(qRound(haikuMenuFontInfo.font_size));
 	    menuFont.setStretch(QFont::Unstretched);
 
 	    QHash<QPlatformTheme::Font, QFont *> fonts;
@@ -290,7 +296,7 @@ const QFont *QHaikuTheme::font(Font type) const
 	    fonts.insert(QPlatformTheme::FixedFont, new QFont(monoFont));
 
 	    QFont smallFont(baseFont);
-	    smallFont.setPointSizeF(haikuPlainFont.Size() * kSmallFont);
+	    smallFont.setPixelSize(qRound(haikuPlainFont.Size() * kSmallFont));
 	    fonts.insert(QPlatformTheme::SmallFont, new QFont(smallFont));
 	    fonts.insert(QPlatformTheme::MiniFont, new QFont(smallFont));
 

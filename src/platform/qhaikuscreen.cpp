@@ -144,7 +144,11 @@ QSizeF QHaikuScreen::physicalSize() const
 
 QDpi QHaikuScreen::logicalDpi() const
 {
-    return QDpi(72, 72);
+    // Haiku treats a point as a pixel and reports 72. Debian's Qt applications
+    // are built against the freedesktop convention of 96, so at 72 everything
+    // sized in points comes out at 75% — Qt Creator's editor text being the
+    // obvious case. The theme's UI font is set in pixels and is unaffected.
+    return QDpi(96, 96);
 }
 
 Qt::ScreenOrientation QHaikuScreen::nativeOrientation() const
