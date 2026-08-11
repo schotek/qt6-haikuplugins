@@ -92,7 +92,11 @@ public:
     void showMessage(const QString &title, const QString &msg,
                      const QIcon &icon, MessageIcon iconType, int msecs) override;
 
-    bool isSystemTrayAvailable() const override { return true; }
+    // Answer honestly: the tray is driven by the external /bin/qsystray
+    // helper (see README). Claiming a tray that cannot appear makes an
+    // application hide itself into nothing.
+    bool isSystemTrayAvailable() const override
+        { return QFileInfo("/bin/qsystray").isFile(); }
     bool supportsMessages() const override { return true; }
 
     bool 	findTrayExecutable(void);

@@ -209,10 +209,19 @@ QHaikuIntegration *QHaikuIntegration::createHaikuIntegration(const QStringList& 
 			}
 		}
 
-		// Rebuild environment arrays
+		// Rebuild environment arrays. setenv() copies name and value;
+		// putenv() would store a pointer into the QByteArray temporary and
+		// leave environ full of dangling entries, so HOME reads back empty
+		// and QStandardPaths resolves everything under "/".
 		clearenv();
-		for ( const auto& envValue : envList )
-			putenv(envValue.toUtf8().data());
+		for ( const auto& envValue : envList ) {
+			const QByteArray entry = envValue.toUtf8();
+			const int eq = entry.indexOf('=');
+			if (eq <= 0)
+				continue;
+			setenv(entry.left(eq).constData(),
+				entry.mid(eq + 1).constData(), 1);
+		}
 	}
 
 	// Enable software rendering for QML
