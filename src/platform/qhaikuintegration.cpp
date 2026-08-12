@@ -60,6 +60,13 @@ QT_END_INCLUDE_NAMESPACE
 
 QT_BEGIN_NAMESPACE
 
+// The BApplication runs on its own spawned thread (haikuApplicationThread).
+// Its id is stored here so the destructor can Quit() the app and join the
+// thread before Qt tears down — otherwise the still-running BApplication
+// thread races the C++ exit finalization and corrupts the heap. The plugin
+// is a singleton, so a single static suffices.
+static thread_id sBAppThread = -1;
+
 QHaikuIntegration::QHaikuIntegration(const QStringList &parameters, int &argc, char **argv)
 	: QObject(), QPlatformIntegration()
 {
@@ -79,6 +86,43 @@ QHaikuIntegration::QHaikuIntegration(const QStringList &parameters, int &argc, c
 
 QHaikuIntegration::~QHaikuIntegration()
 {
+	// Fork mode keeps the crude fast path: kill the process outright rather
+	// than unwinding (checked while be_app is still valid).
+	if (be_app != NULL
+			&& (static_cast<HQApplication*>(be_app)->QtFlags() & Q_KILL_ON_EXIT)) {
+		kill(::getpid(), SIGKILL);
+	}
+
+	// Stop the BApplication run thread and JOIN it before Qt runs its C++ exit
+	// finalization. Without this the thread keeps running BLooper::Loop while
+	// the main thread frees Qt objects, and the two race on the heap ->
+	// "malloc_consolidate(): unaligned fastbin chunk" / Guru Meditation after
+	// a few app closes.
+	//
+	// LockWithTimeout, not Lock(): on the normal (Qt-initiated) shutdown the
+	// looper is idle and we get the lock at once. If the run thread is already
+	// tearing down on its own (a B_QUIT_REQUESTED racing in), it holds the
+	// looper lock and leaves it locked as it exits (Looper.cpp task_looper
+	// returns locked on fTerminating) — the timeout then lets us fall through
+	// to the join instead of blocking forever. We hold the lock across Quit()
+	// so BApplication::Quit() just PostMessage(_QUIT_)s without the
+	// "you must Lock the application" console error; Unlock() lets the run
+	// thread actually dispatch _QUIT_ and return from Run(). We do NOT delete
+	// the BApplication (see haikuApplicationThread). Join the spawn id
+	// (sBAppThread), not be_app->Thread(), which is -1 until Loop() starts.
+	if (be_app != NULL) {
+		if (be_app->LockWithTimeout(2000000) == B_OK) {
+			be_app->Quit();
+			be_app->Unlock();
+		}
+		if (sBAppThread >= 0) {
+			status_t st;
+			while (wait_for_thread(sBAppThread, &st) == B_INTERRUPTED)
+				;
+			sBAppThread = -1;
+		}
+	}
+
 	delete m_nativeInterface;
 	delete m_fontDatabase;
 	delete m_haikuSystemLocale;
@@ -87,10 +131,6 @@ QHaikuIntegration::~QHaikuIntegration()
 	delete m_services;
 
 	QWindowSystemInterface::handleScreenRemoved(m_screen);
-
-	HQApplication *haikuApplication = static_cast<HQApplication*>(be_app);
-	if (haikuApplication->QtFlags() & Q_KILL_ON_EXIT)
-		kill(::getpid(), SIGKILL);
 }
 
 bool QHaikuIntegration::isOpenGLEnabled()
@@ -167,6 +207,7 @@ QHaikuIntegration *QHaikuIntegration::createHaikuIntegration(const QStringList& 
 
 	if (be_app == NULL) {
 		haikuApplication = new HQApplication(appSignature.toUtf8().constData());
+		// remember below for the shutdown join (see the destructor)
 		
 		uint32 qtFlags = 0;
 		BResources *appResource = BApplication::AppResources();
@@ -186,6 +227,7 @@ QHaikuIntegration *QHaikuIntegration::createHaikuIntegration(const QStringList& 
 		haikuApplication->SetQtFlags(qtFlags);		
 
 		my_thread = spawn_thread(haikuApplicationThread, "BApplication_thread", B_NORMAL_PRIORITY, (void*)haikuApplication);
+		sBAppThread = my_thread;
 		resume_thread(my_thread);
 
 		if (settings.value("hide_from_deskbar", true).toBool()) {
@@ -292,6 +334,14 @@ int32 QHaikuIntegration::haikuApplicationThread(void *data)
 	HQApplication *app = static_cast<HQApplication*>(data);
 	app->LockLooper();
 	app->Run();
+	// The BApplication object is deliberately NOT deleted here. ~BApplication
+	// -> ~BLooper asserts the looper is locked while it tears down its child
+	// handlers (Looper.cpp SetNextHandler), and on the shutdown race the
+	// looper is not reliably locked at this point -> Guru Meditation
+	// ("handler's looper must be locked before setting NextHandler").
+	// The controlling thread joins us via wait_for_thread() (see the
+	// destructor); this per-process singleton is reclaimed at process exit.
+	Q_UNUSED(app);
 	return B_OK;
 }
 
